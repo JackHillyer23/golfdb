@@ -84,9 +84,18 @@ if __name__ == '__main__':
     except:
         print("Model weights not found. Download model weights and place in 'models' folder. See README for instructions")
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cpu')
     print('Using device:', device)
-    model.load_state_dict(save_dict['model_state_dict'])
+    try:
+        save_dict = torch.load('models/swingnet_1800.pth.tar', map_location=device)
+        model.load_state_dict(save_dict['model_state_dict'])
+        print("Loaded model weights")
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            "❌ GolfDB model weights not found.\n"
+            "Download 'swingnet_1800.pth.tar' and place it in:\n"
+            "    src/golfdb/models/\n"
+        )
     model.to(device)
     model.eval()
     print("Loaded model weights")
@@ -101,7 +110,7 @@ if __name__ == '__main__':
                 image_batch = images[:, batch * seq_length:, :, :, :]
             else:
                 image_batch = images[:, batch * seq_length:(batch + 1) * seq_length, :, :, :]
-            logits = model(image_batch.cuda())
+            logits = model(image_batch.to(device))
             if batch == 0:
                 probs = F.softmax(logits.data, dim=1).cpu().numpy()
             else:

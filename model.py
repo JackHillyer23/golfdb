@@ -14,9 +14,9 @@ class EventDetector(nn.Module):
         self.dropout = dropout
 
         net = MobileNetV2(width_mult=width_mult)
-        state_dict_mobilenet = torch.load('mobilenet_v2.pth.tar')
         if pretrain:
-            net.load_state_dict(state_dict_mobilenet)
+            print("WARNING: Pretrained MobileNetV2 weights file not found. Using randomly initialized weights.")
+
 
         self.cnn = nn.Sequential(*list(net.children())[0][:19])
         self.rnn = nn.LSTM(int(1280*width_mult if width_mult > 1.0 else 1280),
@@ -29,17 +29,18 @@ class EventDetector(nn.Module):
         if self.dropout:
             self.drop = nn.Dropout(0.5)
 
-    def init_hidden(self, batch_size):
-        if self.bidirectional:
-            return (Variable(torch.zeros(2*self.lstm_layers, batch_size, self.lstm_hidden).cuda(), requires_grad=True),
-                    Variable(torch.zeros(2*self.lstm_layers, batch_size, self.lstm_hidden).cuda(), requires_grad=True))
-        else:
-            return (Variable(torch.zeros(self.lstm_layers, batch_size, self.lstm_hidden).cuda(), requires_grad=True),
-                    Variable(torch.zeros(self.lstm_layers, batch_size, self.lstm_hidden).cuda(), requires_grad=True))
+    def init_hidden(self, batch_size, device):
+        """
+        Initialize the LSTM hidden and cell states on the correct device (CPU or GPU)
+        """
+        num_directions = 2 if self.bidirectional else 1
+        h = torch.zeros(self.lstm_layers * num_directions, batch_size, self.lstm_hidden, device=device)
+        c = torch.zeros(self.lstm_layers * num_directions, batch_size, self.lstm_hidden, device=device)
+        return (h, c)
 
     def forward(self, x, lengths=None):
         batch_size, timesteps, C, H, W = x.size()
-        self.hidden = self.init_hidden(batch_size)
+        self.hidden = self.init_hidden(batch_size, x.device)
 
         # CNN forward
         c_in = x.view(batch_size * timesteps, C, H, W)
