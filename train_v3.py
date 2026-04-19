@@ -11,7 +11,7 @@ if __name__ == '__main__':
     # training configuration
     split = 1
     iterations = 2000       
-    it_save = 50          # save every 100 iterations
+    it_save = 100          # save every 100 iterations
     n_cpu = 0              # 0 is safer on Windows for CPU training
     seq_length = 64
     bs = 4                 # much smaller batch size for CPU
