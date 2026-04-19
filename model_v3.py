@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from MobileNetV2 import MobileNetV2
+from torchvision import models
 
 
 class EventDetector(nn.Module):
@@ -12,26 +12,28 @@ class EventDetector(nn.Module):
         self.bidirectional = bidirectional
         self.dropout = dropout
 
-        net = MobileNetV2(width_mult=width_mult)
-        if pretrain:
-            print("WARNING: Pretrained MobileNetV2 weights file not found. Using randomly initialized weights.")
+        net = models.mobilenet_v3_large(pretrained=pretrain)
+        self.cnn = net.features
 
+        with torch.no_grad():
+            dummy = torch.randn(1, 3, 160, 160)
+            out = self.cnn(dummy)
+            self.feature_dim = out.shape[1]
+            print(f'MobileNetV3-Large feature dim: {self.feature_dim}')
 
-        self.cnn = nn.Sequential(*list(net.children())[0][:19])
-        self.rnn = nn.LSTM(int(1280*width_mult if width_mult > 1.0 else 1280),
-                           self.lstm_hidden, self.lstm_layers,
-                           batch_first=True, bidirectional=bidirectional)
+        self.rnn = nn.LSTM(self.feature_dim,
+                           lstm_hidden,
+                           lstm_layers,
+                           batch_first=True,
+                           bidirectional=bidirectional)
         if self.bidirectional:
-            self.lin = nn.Linear(2*self.lstm_hidden, 9)
+            self.lin = nn.Linear(2 * lstm_hidden, 9)
         else:
-            self.lin = nn.Linear(self.lstm_hidden, 9)
+            self.lin = nn.Linear(lstm_hidden, 9)
         if self.dropout:
             self.drop = nn.Dropout(0.5)
 
     def init_hidden(self, batch_size, device):
-        """
-        Initialize the LSTM hidden and cell states on the correct device (CPU or GPU)
-        """
         num_directions = 2 if self.bidirectional else 1
         h = torch.zeros(self.lstm_layers * num_directions, batch_size, self.lstm_hidden, device=device)
         c = torch.zeros(self.lstm_layers * num_directions, batch_size, self.lstm_hidden, device=device)
@@ -41,20 +43,15 @@ class EventDetector(nn.Module):
         batch_size, timesteps, C, H, W = x.size()
         self.hidden = self.init_hidden(batch_size, x.device)
 
-        # CNN forward
         c_in = x.view(batch_size * timesteps, C, H, W)
         c_out = self.cnn(c_in)
-        c_out = c_out.mean(3).mean(2)
+        c_out = torch.mean(c_out, dim=[2, 3])  # global average pooling
         if self.dropout:
             c_out = self.drop(c_out)
 
-        # LSTM forward
         r_in = c_out.view(batch_size, timesteps, -1)
         r_out, states = self.rnn(r_in, self.hidden)
         out = self.lin(r_out)
-        out = out.view(batch_size*timesteps,9)
+        out = out.view(batch_size * timesteps, 9)
 
         return out
-
-
-
