@@ -7,6 +7,22 @@ from eval import ToTensor, Normalize
 from model import EventDetector
 import numpy as np
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
+
+def plot_confidence(probs):
+    """probs shape: (num_classes, num_frames)"""
+    num_classes, num_frames = probs.shape
+
+    plt.figure(figsize=(12, 4))
+    for i in range(num_classes):
+        plt.plot(probs[i], label=f'Event {i}')
+    plt.xlabel("Frame")
+    plt.ylabel("Confidence")
+    plt.title("Model Confidence Over Time")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig("confidence_plot.png")
+    plt.show()
 
 event_names = {
     0: 'Address',
@@ -118,6 +134,7 @@ if __name__ == '__main__':
             batch += 1
 
     events = np.argmax(probs, axis=0)[:-1]
+    plot_confidence(probs)
     print('Predicted event frames: {}'.format(events))
     cap = cv2.VideoCapture(args.path)
 

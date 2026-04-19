@@ -48,7 +48,13 @@ def eval(model, split, seq_length, n_cpu, disp, device):
                 probs = np.append(probs, F.softmax(logits.data, dim=1).cpu().numpy(), 0)
             batch += 1
 
-        _, _, _, _, c = correct_preds(probs, labels.squeeze().numpy())
+        gt = labels.squeeze().numpy()
+        pred = np.argmax(probs, axis=1)
+        if i == 0:
+            np.save("sample_pred.npy", pred)
+            np.save("sample_gt.npy", gt)
+
+        _, _, _, _, c = correct_preds(probs, gt)
         if disp:
             print(i, c)
         correct.append(c)
