@@ -5,6 +5,7 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms
 import os
+import csv
 
 if __name__ == '__main__':
     split = 1
@@ -13,7 +14,7 @@ if __name__ == '__main__':
     n_cpu = 0
     seq_length = 64
     bs = 4
-    k = 10
+    k = 5
 
     device = torch.device('cpu')
     print('Using device:', device)
@@ -47,6 +48,9 @@ if __name__ == '__main__':
         os.mkdir('models')
 
     print('Training EfficientNet-B0 on CPU...')
+    log_file = open('efficientnet_loss.csv', 'w', newline='')
+    log_writer = csv.writer(log_file)
+    log_writer.writerow(['iteration', 'loss'])
     i = 0
     while i < iterations:
         for sample in data_loader:
@@ -57,6 +61,7 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             loss.backward()
             losses.update(loss.item(), images.size(0))
+            log_writer.writerow([i, loss.item()])
             optimizer.step()
             print('Iteration: {}\tLoss: {loss.val:.4f} ({loss.avg:.4f})'.format(i, loss=losses))
             i += 1
@@ -69,3 +74,4 @@ if __name__ == '__main__':
                 break
 
     print('Training complete.')
+    log_file.close()
