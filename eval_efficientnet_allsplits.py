@@ -7,7 +7,7 @@ import numpy as np
 from model_efficientnet import EventDetector
 from util import correct_preds
 
-def eval(model, split, seq_length, n_cpu, disp, device):
+def eval_split(model, split, seq_length, device, n_cpu=0):
     dataset = GolfDB(
         data_file='data/val_split_{}.pkl'.format(split),
         vid_dir='data/videos_160/',
@@ -18,16 +18,12 @@ def eval(model, split, seq_length, n_cpu, disp, device):
         ]),
         train=False
     )
-
     data_loader = DataLoader(dataset, batch_size=1, shuffle=False,
                              num_workers=n_cpu, drop_last=False)
-
     correct = []
-
     for i, sample in enumerate(data_loader):
         images, labels = sample['images'], sample['labels']
         images = images.to(device)
-
         batch = 0
         while batch * seq_length < images.shape[1]:
             if (batch + 1) * seq_length > images.shape[1]:
@@ -40,24 +36,14 @@ def eval(model, split, seq_length, n_cpu, disp, device):
             else:
                 probs = np.append(probs, F.softmax(logits.data, dim=1).cpu().numpy(), 0)
             batch += 1
-
         gt = labels.squeeze().numpy()
         _, _, _, _, c = correct_preds(probs, gt)
-        if disp:
-            print(i, c)
-        correct.append(c)
-
-    PCE = np.mean(correct)
-    return PCE
-
+        correct.append(np.mean(c))
+    return np.mean(correct)
 
 if __name__ == '__main__':
-    split = 1
-    seq_length = 64
-    n_cpu = 0
-
     device = torch.device('cpu')
-    print('Using device:', device)
+    seq_length = 64
 
     model = EventDetector(pretrain=True,
                           lstm_layers=1,
@@ -65,11 +51,15 @@ if __name__ == '__main__':
                           bidirectional=True,
                           dropout=False)
 
-    save_dict = torch.load('models/swingnet_efficientnet_3500.pth.tar', map_location=device)
+    save_dict = torch.load('models/swingnet_efficientnet_4500.pth.tar', map_location=device)
     model.load_state_dict(save_dict['model_state_dict'])
-    print('Loaded EfficientNet weights')
     model.to(device)
     model.eval()
 
-    PCE = eval(model, split, seq_length, n_cpu, True, device)
-    print('Average PCE: {:.3f}'.format(PCE))
+    pces = []
+    for split in [1, 2, 3, 4]:
+        pce = eval_split(model, split, seq_length, device)
+        print('Split {} PCE: {:.3f}'.format(split, pce))
+        pces.append(pce)
+
+    print('\nAverage PCE across all splits: {:.3f}'.format(np.mean(pces)))
