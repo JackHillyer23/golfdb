@@ -1,60 +1,148 @@
-# GolfDB: A Video Database for Golf Swing Sequencing
+# Golf Swing Event Detection
 
-The code in this repository is licensed under a [Creative Commons Attribution-NonCommercial 4.0 International License](https://creativecommons.org/licenses/by-nc/4.0/). 
+A comparative study of CNN-LSTM architectures for automated golf swing 
+event detection using the GolfDB dataset. This project extends the original 
+SwingNet implementation by McNally et al. by investigating MobileNetV3-Large 
+and EfficientNet-B0 as alternative backbone architectures.
 
-## Introduction
-GolfDB is a high-quality video dataset created for general recognition applications 
-in the sport of golf, and specifically for the task of golf swing sequencing. 
+## Project Structure
+golfdb/
+├── model.py                    # Original MobileNetV2 model (authors)
+├── model_v2_torchvision.py     # MobileNetV2 using torchvision
+├── model_v3.py                 # MobileNetV3-Large implementation
+├── model_efficientnet.py       # EfficientNet-B0 implementation
+├── train.py                    # Original training script (authors)
+├── train_v2_scratch.py         # MobileNetV2 training from scratch
+├── train_v3.py                 # MobileNetV3-Large training
+├── train_efficientnet.py       # EfficientNet-B0 training
+├── train_efficientnet_continued.py  # EfficientNet-B0 extended training
+├── eval.py                     # Original evaluation script (authors)
+├── eval_v3.py                  # MobileNetV3-Large evaluation
+├── eval_efficientnet.py        # EfficientNet-B0 evaluation
+├── eval_v2_scratch.py          # MobileNetV2 scratch evaluation
+├── eval_v2_allsplits.py        # MobileNetV2 all splits evaluation
+├── eval_v3_allsplits.py        # MobileNetV3-Large all splits evaluation
+├── eval_efficientnet_allsplits.py  # EfficientNet-B0 all splits evaluation
+├── dataloader.py               # Dataset loading and preprocessing
+├── util.py                     # Utility functions including PCE calculation
+├── test_video.py               # Video inference script (authors V2)
+├── test_video_efficientnet.py  # Video inference script (EfficientNet)
+├── generate_graphs.py          # PCE comparison and heatmap generation
+├── generate_allsplits_graphs.py # All splits PCE graph generation
+├── check_model.py              # Model architecture inspection utility
+├── models/                     # Saved model checkpoints
+│   ├── swingnet_1800.pth.tar  # Authors pretrained weights
+│   ├── swingnet_v3_.pth.tar  # MobileNetV3 checkpoints
+│   └── swingnet_efficientnet_.pth.tar  # EfficientNet checkpoints
+└── data/
+├── videos_160/             # Preprocessed 160x160 video clips
+├── train_split_.pkl       # Training split annotations
+└── val_split_.pkl         # Validation split annotations
 
-This repo contains a simple PyTorch implemention of the SwingNet baseline model presented in the 
-[paper](https://arxiv.org/abs/1903.06528).
-The model was trained on split 1 **without any data augmentation** and achieved an average PCE of 71.5% (PCE
-of 76.1% reported in the paper is credited to data augmentation including horizontal flipping and affine 
-transformations). 
+## Requirements
 
-If you use this repo please cite the GolfDB paper:
+```bash
+conda create -n golf_swing python=3.9
+conda activate golf_swing
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+pip install opencv-python pandas matplotlib numpy
 ```
-@InProceedings{McNally_2019_CVPR_Workshops,
-author = {McNally, William and Vats, Kanav and Pinto, Tyler and Dulhanty, Chris and McPhee, John and Wong, Alexander},
-title = {GolfDB: A Video Database for Golf Swing Sequencing},
-booktitle = {The IEEE Conference on Computer Vision and Pattern Recognition (CVPR) Workshops},
-month = {June},
-year = {2019}
-}
+
+## Results Summary
+
+| Model | Split 1 PCE | Avg PCE (all splits) |
+|---|---|---|
+| MobileNetV2 (Authors) | 0.715 | 0.813 |
+| MobileNetV2 (Scratch) | 0.612 | 0.641 |
+| MobileNetV3-Large | 0.661 | 0.650 |
+| EfficientNet-B0 (Optimised) | 0.719 | 0.754 |
+
+## Training
+
+**Train MobileNetV2 from scratch:**
+```bash
+python train_v2_scratch.py
 ```
 
-## Dependencies
-* [PyTorch](https://pytorch.org/)
+**Train MobileNetV3-Large:**
+```bash
+python train_v3.py
+```
 
-## Getting Started
-Run [generate_splits.py](./data/generate_splits.py) to convert the .mat dataset file to a dataframe and 
-generate the 4 splits.
+**Train EfficientNet-B0:**
+```bash
+python train_efficientnet.py
+```
 
-### Train
-* I have provided the preprocessed video clips for a frame size of 160x160 (download 
-[here](https://drive.google.com/file/d/1uBwRxFxW04EqG87VCoX3l6vXeV5T5JYJ/view?usp=sharing)). 
-Place 'videos_160' in the [data](./data/) directory. 
-If you wish to use a different input configuration you must download the YouTube videos (URLs provided in 
-dataset) and preprocess the videos yourself. I have provided [preprocess_videos.py](./data/preprocess_videos.py) to
-help with that.
+**Continue EfficientNet-B0 training (optimisation stage):**
+```bash
+python train_efficientnet_continued.py
+```
 
-* Download the MobileNetV2 pretrained weights from this [repository](https://github.com/tonylins/pytorch-mobilenet-v2) 
-and place 'mobilenet_v2.pth.tar' in the root directory. 
+## Evaluation
 
-* Run [train.py](train.py)
+**Evaluate on split 1:**
+```bash
+python eval_efficientnet.py
+python eval_v3.py
+python eval_v2_scratch.py
+```
 
-### Evaluate
-* Train your own model by following the steps above or download the pre-trained weights 
-[here](https://drive.google.com/file/d/1MBIDwHSM8OKRbxS8YfyRLnUBAdt0nupW/view?usp=sharing). Create a 'models' directory
-if not already created and place 'swingnet_1800.pth.tar' in this directory.
+**Evaluate across all 4 splits:**
+```bash
+python eval_efficientnet_allsplits.py
+python eval_v3_allsplits.py
+python eval_v2_scratch_allsplits.py
+python eval_baseline_allsplits.py
+```
 
-* Run [eval.py](eval.py). If using the pre-trained weights provided, the PCE should be 0.715.  
+## Video Inference
 
-### Test your own video
-* Follow steps above to download pre-trained weights. Then in the terminal: `python3 test_video.py -p test_video.mp4`
+**Run inference on a video using authors baseline:**
+```bash
+python test_video.py -p your_video.mp4
+```
 
-* **Note:** This code requires the sample video to be cropped and cut to bound a single golf swing. 
-I used online video [cropping](https://ezgif.com/crop-video) and [cutting](https://online-video-cutter.com/) 
-tools for my golf swing video. See test_video.mp4 for reference.
+**Run inference using optimised EfficientNet-B0:**
+```bash
+python test_video_efficientnet.py -p your_video.mp4
+```
 
-Good luck!
+Note: Input video should be filmed face-on in landscape orientation 
+for best results.
+
+## Generating Graphs
+
+**Generate PCE comparison and heatmap graphs:**
+```bash
+python generate_graphs.py
+```
+
+**Generate all splits PCE graphs:**
+```bash
+python generate_allsplits_graphs.py
+```
+
+## Dataset
+
+The GolfDB dataset is required to run training and evaluation. 
+Place preprocessed 160x160 video clips in data/videos_160/ and 
+annotation pickle files in data/. 
+
+Dataset available at: https://github.com/wmcnally/golfdb
+
+## Pretrained Weights
+
+The authors' pretrained MobileNetV2 weights (swingnet_1800.pth.tar) 
+should be placed in the models/ folder.
+
+Available at: https://github.com/wmcnally/golfdb
+
+## Hardware Notes
+
+GPU training requires PyTorch with CUDA support. Note that the 
+NVIDIA RTX 5060 (CUDA capability sm_120) is not supported by 
+stable PyTorch builds at the time of writing. All training in 
+this project was conducted on CPU.
+
+## References
