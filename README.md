@@ -6,7 +6,7 @@ SwingNet implementation by McNally et al. by investigating MobileNetV3-Large
 and EfficientNet-B0 as alternative backbone architectures.
 
 ## Project Structure
-'''
+```
 golfdb/
 ├── model.py                    # Original MobileNetV2 model (authors)
 ├── model_v2_torchvision.py     # MobileNetV2 using torchvision
@@ -39,7 +39,9 @@ golfdb/
 ├── videos_160/             # Preprocessed 160x160 video clips
 ├── train_split_.pkl       # Training split annotations
 └── val_split_.pkl         # Validation split annotations
-'''## Requirements
+```
+
+## Requirements
 
 ```bash
 conda create -n golf_swing python=3.9
