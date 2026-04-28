@@ -18,15 +18,23 @@ def eval_split(model, split, seq_length, device, n_cpu=0):
         ]),
         train=False
     )
-    data_loader = DataLoader(dataset, batch_size=1, shuffle=False,
-                             num_workers=n_cpu, drop_last=False)
+    data_loader = DataLoader(
+        dataset, 
+        batch_size=1, 
+        shuffle=False,
+        num_workers=n_cpu, 
+        drop_last=False)
+    
+
     correct = []
     for i, sample in enumerate(data_loader):
         images, labels = sample['images'], sample['labels']
         images = images.to(device)
+
+        # process the video in 64 frame batches
         batch = 0
         while batch * seq_length < images.shape[1]:
-            if (batch + 1) * seq_length > images.shape[1]:
+            if (batch + 1) * seq_length > images.shape[1]: # handles last batch if shorter than 64 frames
                 image_batch = images[:, batch * seq_length:, :, :, :]
             else:
                 image_batch = images[:, batch * seq_length:(batch + 1) * seq_length, :, :, :]
@@ -37,6 +45,8 @@ def eval_split(model, split, seq_length, device, n_cpu=0):
                 probs = np.append(probs, F.softmax(logits.data, dim=1).cpu().numpy(), 0)
             batch += 1
         gt = labels.squeeze().numpy()
+
+        # calculates which events were correctly predicted within the tolerance window
         _, _, _, _, c = correct_preds(probs, gt)
         correct.append(np.mean(c))
     return np.mean(correct)
@@ -44,7 +54,6 @@ def eval_split(model, split, seq_length, device, n_cpu=0):
 if __name__ == '__main__':
     device = torch.device('cpu')
     seq_length = 64
-
     model = EventDetector(pretrain=True,
                           width_mult=1.,
                           lstm_layers=1,
@@ -52,15 +61,16 @@ if __name__ == '__main__':
                           bidirectional=True,
                           dropout=False)
 
+    #load my v2 model weights 
     save_dict = torch.load('models/swingnet_v2_scratch_2000.pth.tar', map_location=device)
     model.load_state_dict(save_dict['model_state_dict'])
     model.to(device)
     model.eval()
 
-    pces = []
-    for split in [1, 2, 3, 4]:
-        pce = eval_split(model, split, seq_length, device)
-        print('Split {} PCE: {:.3f}'.format(split, pce))
-        pces.append(pce)
-
-    print('\nAverage PCE across all splits: {:.3f}'.format(np.mean(pces)))
+    # evaluates the model  across all 4 splits
+    scores = []
+    for splits in [1,2,3,4]:
+        pce = eval_split(model, splits, seq_length, device)
+        print('Split {} PCE: {:.3f}'.format(splits, pce))
+        scores.append(pce)
+    print('\nAverage PCE across all splits: {:.3f}'.format(np.mean(scores)))

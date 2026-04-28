@@ -7,6 +7,7 @@ import numpy as np
 from model_v3 import EventDetector
 from util import correct_preds
 
+
 def eval(model, split, seq_length, n_cpu, disp, device):
     dataset = GolfDB(
         data_file='data/val_split_{}.pkl'.format(split),
@@ -24,8 +25,7 @@ def eval(model, split, seq_length, n_cpu, disp, device):
         batch_size=1,
         shuffle=False,
         num_workers=n_cpu,
-        drop_last=False
-    )
+        drop_last=False)
 
     correct = []
 
@@ -33,10 +33,10 @@ def eval(model, split, seq_length, n_cpu, disp, device):
         images, labels = sample['images'], sample['labels']
         images = images.to(device)  # send inputs to same device as model
 
-        # process in seq_length batches
+        # process the video in 64 frame batches
         batch = 0
         while batch * seq_length < images.shape[1]:
-            if (batch + 1) * seq_length > images.shape[1]:
+            if (batch + 1) * seq_length > images.shape[1]: # handles last batch if shorter than 64 frames
                 image_batch = images[:, batch * seq_length:, :, :, :]
             else:
                 image_batch = images[:, batch * seq_length:(batch + 1) * seq_length, :, :, :]
@@ -50,14 +50,17 @@ def eval(model, split, seq_length, n_cpu, disp, device):
 
         gt = labels.squeeze().numpy()
         pred = np.argmax(probs, axis=1)
+
+        # save first video predictions and ground truth for debugging
         if i == 0:
             np.save("sample_pred.npy", pred)
             np.save("sample_gt.npy", gt)
-
+        # calculates which events were correctly predicted within the tolerance window
         _, _, _, _, c = correct_preds(probs, gt)
         if disp:
             print(i, c)
         correct.append(c)
+
 
     PCE = np.mean(correct)
     return PCE
@@ -67,7 +70,6 @@ if __name__ == '__main__':
     split = 1
     seq_length = 64
     n_cpu = 6
-
     device = torch.device('cpu')
     print('Using device:', device)
 
@@ -80,11 +82,13 @@ if __name__ == '__main__':
         dropout=False
     )
 
-    save_dict = torch.load('models/swingnet_v3_500.pth.tar', map_location=device)
+
+    #load the v3 model weights 
+    save_dict = torch.load('models/swingnet_v3_2000.pth.tar', map_location=device)
     model.load_state_dict(save_dict['model_state_dict'])
     print("Loaded V3 weights")
     model.to(device)
     model.eval()
 
-    PCE = eval(model, split, seq_length, n_cpu, True, device)
-    print('Average PCE: {:.3f}'.format(PCE))
+    pce_scores = eval(model, split, seq_length, n_cpu, True, device)
+    print('Average PCE: {:.3f}'.format(pce_scores))

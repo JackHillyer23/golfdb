@@ -8,13 +8,15 @@ import os
 import csv
 
 if __name__ == '__main__':
+
+    #Final optimisation stage hyperparameters
     split = 1
-    iterations = 4500
-    it_save = 100
+    iterations = 4500 #train from 3500 to 4500 iterations
+    it_save = 100 # save model every 100 iterations
     n_cpu = 0
     seq_length = 64
     bs = 4
-    k = 3
+    k = 3 # frozen layers
 
     device = torch.device('cpu')
     print('Using device:', device)
@@ -26,12 +28,11 @@ if __name__ == '__main__':
                           dropout=False)
     freeze_layers(k, model)
 
-    optimizer = torch.optim.Adam(
-        filter(lambda p: p.requires_grad, model.parameters()), lr=0.0001)
-
+    # reduced learning rate for fine-tuning
+    optimizer = torch.optim.Adam( filter(lambda p: p.requires_grad, model.parameters()), lr=0.0001)
+    # resume from 3500 iteration checkpoint
     checkpoint = torch.load('models/swingnet_efficientnet_3500.pth.tar', map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
-    print('Resumed from iteration 2000')
 
     model.train()
     model.to(device)
@@ -40,17 +41,22 @@ if __name__ == '__main__':
                      vid_dir='data/videos_160/',
                      seq_length=seq_length,
                      transform=transforms.Compose([ToTensor(),
-                                                   Normalize([0.485, 0.456, 0.406],
-                                                             [0.229, 0.224, 0.225])]),
+                                                   Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]),
                      train=True)
 
-    data_loader = DataLoader(dataset, batch_size=bs, shuffle=True,
-                             num_workers=n_cpu, drop_last=True)
+    data_loader = DataLoader(dataset, 
+                             batch_size=bs, 
+                             shuffle=True,
+                             num_workers=n_cpu,
+                             drop_last=True)
 
+
+    # class weights to handle 1:35 event to non-event imbalance
     weights = torch.FloatTensor([1/8, 1/8, 1/8, 1/8, 1/8, 1/8, 1/8, 1/8, 1/35]).to(device)
     criterion = torch.nn.CrossEntropyLoss(weight=weights)
     losses = AverageMeter()
 
+    # log loss to a separate CSV for this optimisation stage
     log_file = open('efficientnet_continued_loss.csv', 'w', newline='')
     writer = csv.writer(log_file)
     writer.writerow(['iteration', 'loss'])
@@ -72,9 +78,9 @@ if __name__ == '__main__':
             log_file.flush()
             i += 1
             if i % it_save == 0:
-                torch.save({'optimizer_state_dict': optimizer.state_dict(),
-                            'model_state_dict': model.state_dict()},
-                           'models/swingnet_efficientnet_{}.pth.tar'.format(i))
+                torch.save({'optimizer_state_dict': optimizer.state_dict(), 
+                            'model_state_dict': model.state_dict()}, 
+                            'models/swingnet_efficientnet_{}.pth.tar'.format(i))
                 print('Saved checkpoint at iteration {}'.format(i))
             if i == iterations:
                 break

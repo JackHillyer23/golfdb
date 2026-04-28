@@ -9,7 +9,7 @@ import csv
 
 if __name__ == '__main__':
 
-    # training configuration
+    #MobileNetV3 training stage hyperparameters
     split = 1
     iterations = 2000       
     it_save = 100          # save every 100 iterations
@@ -21,6 +21,7 @@ if __name__ == '__main__':
     device = torch.device('cpu')
     print('Using device:', device)
 
+    # load MobileNetV3 with pretrained ImageNet weights
     model = EventDetector(pretrain=True,
                           width_mult=1.,
                           lstm_layers=1,
@@ -35,8 +36,7 @@ if __name__ == '__main__':
                      vid_dir='data/videos_160/',
                      seq_length=seq_length,
                      transform=transforms.Compose([ToTensor(),
-                                                   Normalize([0.485, 0.456, 0.406],
-                                                             [0.229, 0.224, 0.225])]),
+                                                   Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]),
                      train=True)
 
     data_loader = DataLoader(dataset,
@@ -44,26 +44,29 @@ if __name__ == '__main__':
                              shuffle=True,
                              num_workers=n_cpu,
                              drop_last=True)
+    
 
-    # same class weights as original
+    # class weights to handle 1:35 event to non-event imbalance
     weights = torch.FloatTensor([1/8, 1/8, 1/8, 1/8, 1/8, 1/8, 1/8, 1/8, 1/35]).to(device)
     criterion = torch.nn.CrossEntropyLoss(weight=weights)
+
+    # only unfrozen parameters receive gradient updates
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=0.001)
 
     losses = AverageMeter()
 
+    # create models directory if it doesnt exist
     if not os.path.exists('models'):
         os.mkdir('models')
 
     print('Training MobileNetV3 on CPU...')
+
+    # log loss to CSV for post training analysis and visualisation
     log_file = open('mobilenetv3_loss.csv', 'w', newline='')
     log_writer = csv.writer(log_file)
     log_writer.writerow(['iteration', 'loss'])
     i = 0
-    #checkpoint = torch.load('models/swingnet_v3_2000.pth.tar', map_location=device)
-    #model.load_state_dict(checkpoint['model_state_dict'])
-    #print('Resumed from checkpoint')
-    #i = 2000  # start from 2000
+    
 
     while i < iterations:
         for sample in data_loader:
@@ -81,10 +84,9 @@ if __name__ == '__main__':
             if i % it_save == 0:
                 torch.save({'optimizer_state_dict': optimizer.state_dict(),
                             'model_state_dict': model.state_dict()},
-                           'models/swingnet_v3_{}.pth.tar'.format(i))
+                            'models/swingnet_v3_{}.pth.tar'.format(i))
                 print('Saved model at iteration {}'.format(i))
             if i == iterations:
                 break
-
     print('Training complete.')
     log_file.close()

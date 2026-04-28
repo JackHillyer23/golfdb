@@ -19,8 +19,13 @@ def eval(model, split, seq_length, n_cpu, disp, device):
         train=False
     )
 
-    data_loader = DataLoader(dataset, batch_size=1, shuffle=False,
-                             num_workers=n_cpu, drop_last=False)
+    data_loader = DataLoader(
+        dataset, 
+        batch_size=1, 
+        shuffle=False,
+        num_workers=n_cpu, 
+        drop_last=False)
+
 
     correct = []
 
@@ -28,9 +33,10 @@ def eval(model, split, seq_length, n_cpu, disp, device):
         images, labels = sample['images'], sample['labels']
         images = images.to(device)
 
+        # process the video in 64 frame batches
         batch = 0
         while batch * seq_length < images.shape[1]:
-            if (batch + 1) * seq_length > images.shape[1]:
+            if (batch + 1) * seq_length > images.shape[1]:# handles last batch if shorter than 64 frames
                 image_batch = images[:, batch * seq_length:, :, :, :]
             else:
                 image_batch = images[:, batch * seq_length:(batch + 1) * seq_length, :, :, :]
@@ -40,8 +46,9 @@ def eval(model, split, seq_length, n_cpu, disp, device):
             else:
                 probs = np.append(probs, F.softmax(logits.data, dim=1).cpu().numpy(), 0)
             batch += 1
-
         gt = labels.squeeze().numpy()
+
+        # calculates which events were correctly predicted within the tolerance window
         _, _, _, _, c = correct_preds(probs, gt)
         if disp:
             print(i, c)
@@ -55,21 +62,23 @@ if __name__ == '__main__':
     split = 1
     seq_length = 64
     n_cpu = 0
-
     device = torch.device('cpu')
     print('Using device:', device)
 
+    # Loads the EfficientNet model
     model = EventDetector(pretrain=True,
                           lstm_layers=1,
                           lstm_hidden=256,
                           bidirectional=True,
                           dropout=False)
 
+    #load weights from the second optimised training checkpoint, can change tar file to _2000 instead for base result
     save_dict = torch.load('models/swingnet_efficientnet_3500.pth.tar', map_location=device)
     model.load_state_dict(save_dict['model_state_dict'])
     print('Loaded EfficientNet weights')
     model.to(device)
     model.eval()
 
-    PCE = eval(model, split, seq_length, n_cpu, True, device)
-    print('Average PCE: {:.3f}'.format(PCE))
+
+    pce_score = eval(model, split, seq_length, n_cpu,True, device)
+    print('Average PCE: {:.3f}'.format(pce_score))

@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 event_names = ['Address', 'Toe-up', 'Mid-backswing', 'Top',
                'Mid-downswing', 'Impact', 'Mid-follow-through', 'Finish']
 
-def get_per_event(model, split, seq_length, device, n_cpu=0):
+def get_per_event(model, split, seq_length, device, n_cpu=0): # average per-event accuracy for all videos on each model
     dataset = GolfDB(
         data_file='data/val_split_{}.pkl'.format(split),
         vid_dir='data/videos_160/',
@@ -22,15 +22,21 @@ def get_per_event(model, split, seq_length, device, n_cpu=0):
         ]),
         train=False
     )
-    data_loader = DataLoader(dataset, batch_size=1, shuffle=False,
-                             num_workers=n_cpu, drop_last=False)
-    all_correct = []
-    for i, sample in enumerate(data_loader):
+    data_loader = DataLoader(
+        dataset, 
+        batch_size=1, 
+        shuffle=False,
+        num_workers=n_cpu, 
+        drop_last=False)
+    
+
+    results = []
+    for i, sample in enumerate(data_loader): #loops through validation set 1 video at a time
         images, labels = sample['images'], sample['labels']
         images = images.to(device)
         batch = 0
         while batch * seq_length < images.shape[1]:
-            if (batch + 1) * seq_length > images.shape[1]:
+            if (batch + 1) * seq_length > images.shape[1]: # handles last batch if shorter than 64 frames
                 image_batch = images[:, batch * seq_length:, :, :, :]
             else:
                 image_batch = images[:, batch * seq_length:(batch + 1) * seq_length, :, :, :]
@@ -41,15 +47,19 @@ def get_per_event(model, split, seq_length, device, n_cpu=0):
                 probs = np.append(probs, F.softmax(logits.data, dim=1).cpu().numpy(), 0)
             batch += 1
         gt = labels.squeeze().numpy()
+
+
+        # calculates which events were correctly predicted within the tolerance window
         _, _, _, _, c = correct_preds(probs, gt)
-        all_correct.append(c)
-    return np.array(all_correct)
+        results.append(c)
+    return np.array(results)
+
 
 if __name__ == '__main__':
     device = torch.device('cpu')
     seq_length = 64
 
-    # Load authors V2 model
+    # load authors baseline model
     from model import EventDetector as V2Detector
     v2_model = V2Detector(pretrain=True, width_mult=1., lstm_layers=1,
                           lstm_hidden=256, bidirectional=True, dropout=False)
@@ -58,9 +68,9 @@ if __name__ == '__main__':
     v2_model.to(device)
     v2_model.eval()
     print('Evaluating authors V2...')
-    v2_correct = get_per_event(v2_model, 1, seq_length, device)
+    v2_results = get_per_event(v2_model, 1, seq_length, device)
 
-    # Load EfficientNet model
+    # load EfficientNet optimised model
     from model_efficientnet import EventDetector as EffDetector
     eff_model = EffDetector(pretrain=True, lstm_layers=1,
                             lstm_hidden=256, bidirectional=True, dropout=False)
@@ -69,34 +79,31 @@ if __name__ == '__main__':
     eff_model.to(device)
     eff_model.eval()
     print('Evaluating EfficientNet...')
-    eff_correct = get_per_event(eff_model, 1, seq_length, device)
+    eff_results = get_per_event(eff_model, 1, seq_length, device)
 
-    # Build heatmap data
+    # build heatmap data
     heatmap_data = np.array([
-        v2_correct.mean(axis=0),
-        eff_correct.mean(axis=0)
+        v2_results.mean(axis=0),
+        eff_results.mean(axis=0)
     ])
     model_labels = ['MobileNetV2\n(Authors, 0.715)', 'EfficientNet-B0\n(Mine, 0.719)']
 
-    # Plot heatmap
+
+    # plot the graph
     fig, ax = plt.subplots(figsize=(12, 4))
     im = ax.imshow(heatmap_data, cmap='RdYlGn', aspect='auto', vmin=0, vmax=1)
-
     ax.set_xticks(range(8))
     ax.set_xticklabels(event_names, rotation=30, ha='right', fontsize=11)
     ax.set_yticks(range(2))
     ax.set_yticklabels(model_labels, fontsize=11)
-
     for i in range(2):
         for j in range(8):
             val = heatmap_data[i, j]
             ax.text(j, i, f'{val:.2f}', ha='center', va='center',
                     fontsize=10, fontweight='bold',
                     color='black' if 0.3 < val < 0.8 else 'white')
-
     plt.colorbar(im, ax=ax, label='Accuracy')
-    ax.set_title('Per-Event Accuracy: Authors Baseline vs My Best Model', 
-                 fontsize=14, fontweight='bold')
+    ax.set_title('Per-Event Accuracy: Authors Baseline vs My Best Model', fontsize=14, fontweight='bold')
     plt.tight_layout()
     plt.savefig('graph_heatmap_comparison.png', dpi=150)
     print('Saved graph_heatmap_comparison.png')
